@@ -14,7 +14,8 @@ import {
   ResolverDataBasedFactory,
 } from '@graphql-mesh/string-interpolation';
 import { MeshFetch } from '@graphql-mesh/types';
-import { Executor, getDirective, getRootTypes } from '@graphql-tools/utils';
+import { getHeadersObj } from '@graphql-mesh/utils';
+import { createGraphQLError, Executor, getDirective, getRootTypes } from '@graphql-tools/utils';
 import { fetch as defaultFetchFn } from '@whatwg-node/fetch';
 import { parseXmlOptions } from './parseXmlOptions.js';
 
@@ -86,6 +87,7 @@ interface SoapAnnotations {
 }
 
 interface CreateRootValueMethodOpts {
+  subgraphName: string;
   soapAnnotations: SoapAnnotations;
   fetchFn: MeshFetch;
   jsonToXMLConverter: JSONToXMLConverter;
@@ -93,7 +95,42 @@ interface CreateRootValueMethodOpts {
   operationHeadersFactory: ResolverDataBasedFactory<Record<string, string>>;
 }
 
+function prepareErrorExtensionsFromResponse(
+  subgraphName: string,
+  url: string,
+  method: string,
+  requestBody: string,
+  response: Response,
+  responseText: string,
+) {
+  const httpExtensions = {
+    status: response.status,
+    headers: getHeadersObj(response.headers),
+  };
+  const requestExtensions = {
+    url,
+    method,
+    body: requestBody,
+  };
+  const contentType = response.headers.get('content-type');
+  if (contentType?.includes('json')) {
+    return {
+      subgraph: subgraphName,
+      http: httpExtensions,
+      request: requestExtensions,
+      responseJson: JSON.parse(responseText),
+    };
+  }
+  return {
+    subgraph: subgraphName,
+    http: httpExtensions,
+    request: requestExtensions,
+    responseText,
+  };
+}
+
 function createRootValueMethod({
+  subgraphName,
   soapAnnotations,
   fetchFn,
   jsonToXMLConverter,
@@ -115,7 +152,7 @@ function createRootValueMethod({
       },
     };
     const requestXML = jsonToXMLConverter.build(requestJson);
-    const currentFetchFn = context?.fetch || fetchFn;
+    const currentFetchFn: MeshFetch = context?.fetch || fetchFn;
     const response = await currentFetchFn(
       soapAnnotations.endpoint,
       {
@@ -134,13 +171,39 @@ function createRootValueMethod({
       context,
       info,
     );
+    if (!response.ok) {
+      return createGraphQLError(`Upstream HTTP Error: ${response.status} ${response.statusText}`, {
+        extensions: prepareErrorExtensionsFromResponse(
+          subgraphName,
+          soapAnnotations.endpoint,
+          'POST',
+          requestXML,
+          response,
+          await response.text(),
+        ),
+      });
+    }
     const responseXML = await response.text();
-    const responseJSON = xmlToJSONConverter.parse(responseXML, parseXmlOptions);
-    return normalizeResult(responseJSON.Envelope[0].Body[0][soapAnnotations.elementName]);
+    try {
+      const responseJSON = xmlToJSONConverter.parse(responseXML, parseXmlOptions);
+      return normalizeResult(responseJSON.Envelope[0].Body[0][soapAnnotations.elementName]);
+    } catch (e) {
+      return createGraphQLError(`Invalid SOAP response: ${e.message}`, {
+        extensions: prepareErrorExtensionsFromResponse(
+          subgraphName,
+          soapAnnotations.endpoint,
+          'POST',
+          requestXML,
+          response,
+          responseXML,
+        ),
+      });
+    }
   };
 }
 
 function createRootValue(
+  subgraphName: string,
   schema: GraphQLSchema,
   fetchFn: MeshFetch,
   operationHeaders: Record<string, string>,
@@ -167,6 +230,7 @@ function createRootValue(
       }
       const soapAnnotations: SoapAnnotations = Object.assign({}, ...annotations);
       rootValue[fieldName] = createRootValueMethod({
+        subgraphName,
         soapAnnotations,
         fetchFn,
         jsonToXMLConverter,
@@ -182,11 +246,12 @@ export function createExecutorFromSchemaAST(
   schema: GraphQLSchema,
   fetchFn: MeshFetch = defaultFetchFn,
   operationHeaders: Record<string, string> = {},
+  subgraphName = 'SOAP',
 ) {
   let rootValue: Record<string, RootValueMethod>;
   return function soapExecutor({ document, variables, context }) {
     if (!rootValue) {
-      rootValue = createRootValue(schema, fetchFn, operationHeaders);
+      rootValue = createRootValue(subgraphName, schema, fetchFn, operationHeaders);
     }
     return execute({
       schema,
