@@ -13,7 +13,7 @@ import {
   getInterpolatedHeadersFactory,
   ResolverDataBasedFactory,
 } from '@graphql-mesh/string-interpolation';
-import { MeshFetch } from '@graphql-mesh/types';
+import { MeshFetch, MeshUpstreamErrorExtensions } from '@graphql-mesh/types';
 import { getHeadersObj } from '@graphql-mesh/utils';
 import { createGraphQLError, Executor, getDirective, getRootTypes } from '@graphql-tools/utils';
 import { fetch as defaultFetchFn } from '@whatwg-node/fetch';
@@ -102,30 +102,19 @@ function prepareErrorExtensionsFromResponse(
   requestBody: string,
   response: Response,
   responseText: string,
-) {
-  const httpExtensions = {
-    status: response.status,
-    headers: getHeadersObj(response.headers),
-  };
-  const requestExtensions = {
-    url,
-    method,
-    body: requestBody,
-  };
-  const contentType = response.headers.get('content-type');
-  if (contentType?.includes('json')) {
-    return {
-      subgraph: subgraphName,
-      http: httpExtensions,
-      request: requestExtensions,
-      responseJson: JSON.parse(responseText),
-    };
-  }
+): MeshUpstreamErrorExtensions {
   return {
     subgraph: subgraphName,
-    http: httpExtensions,
-    request: requestExtensions,
-    responseText,
+    http: {
+      status: response.status,
+      headers: getHeadersObj(response.headers),
+    },
+    request: {
+      endpoint: url,
+      method,
+      body: requestBody,
+    },
+    responseBody: responseText,
   };
 }
 
