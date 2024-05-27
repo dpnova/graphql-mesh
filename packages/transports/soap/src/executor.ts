@@ -107,6 +107,7 @@ function prepareErrorExtensionsFromResponse(
     subgraph: subgraphName,
     http: {
       status: response.status,
+      statusText: response.statusText,
       headers: getHeadersObj(response.headers),
     },
     request: {
