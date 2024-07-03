@@ -61,25 +61,10 @@ install them from the official Docker website.
 
 You can create a custom Docker image that inherits from the theguild/graphql-mesh:v1 base image.
 
-Example Dockerfile:
-
 ```dockerfile
 FROM theguild/graphql-mesh:v1
 
-# Set a non-root user to run the container
-RUN useradd --create-home --shell /bin/bash mesh
-USER mesh
-
-WORKDIR /app
-
-COPY mesh.config.ts ./
-COPY package.json ./
-
-RUN npm install --only=production
-
-EXPOSE 4000
-
-ENTRYPOINT ["npx", "mesh-serve"]
+# Extend here
 ```
 
 Then build your image:
