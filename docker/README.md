@@ -87,3 +87,14 @@ docker run --read-only --cap-drop=ALL --cap-add=CHOWN --security-opt no-new-priv
 
 Replace `your-hive-cdn-endpoint`, `your-hive-cdn-key` and `your-hive-registry-token` with your
 actual values.
+
+Description of the used Security Options:
+
+- `--read-only`: This flag makes the container's filesystem read-only, enhancing security by
+  preventing any modifications to the filesystem during runtime.
+- `--cap-drop=ALL`: This option drops all Linux capabilities from the container, reducing the
+  potential attack surface by limiting the container’s privileges.
+- `--cap-add=CHOWN`: This flag adds back the CHOWN capability, allowing the container to change file
+  ownership. This is necessary since it allows us to modify file ownership inside the container.
+- `--security-opt no-new-privileges`: This option ensures that the container cannot gain additional
+  privileges via setuid or setgid binaries, preventing potential privilege escalation attacks.
