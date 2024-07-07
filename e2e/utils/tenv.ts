@@ -132,11 +132,17 @@ export interface ContainerOptions extends ProcOptions {
    * If provided, the run function will wait for the container to become healthy.
    */
   healthcheck: string[];
+  /**
+   * Volumes to mount in the container
+   */
+  volumes?: { hostPath: string; containerPath: string; readOnly?: boolean }[];
 }
 
 export interface Container extends Service {
   /** Host port binding to the {@link ContainerOptions.containerPort}. */
   port: number;
+  stop(): Promise<void>;
+  remove(): Promise<void>;
 }
 
 export interface Tenv {
@@ -158,7 +164,31 @@ export interface Tenv {
   container(opts: ContainerOptions): Promise<Container>;
 }
 
+export async function checkDockerRunning(): Promise<void> {
+  try {
+    await docker.ping();
+  } catch (err) {
+    throw new Error('Docker is not running. Please start Docker and try again.');
+  }
+}
+
+export async function checkLocalDockerImage(image: string): Promise<boolean> {
+  try {
+    await docker.getImage(image).inspect();
+    console.log(`Local Docker image ${image} found:`);
+    return true;
+  } catch (err) {
+    console.error(`Error checking local Docker image ${image}:`, err);
+    return false;
+  }
+}
+
 export function createTenv(cwd: string): Tenv {
+  checkDockerRunning().catch(err => {
+    console.error(err.message);
+    process.exit(1);
+  });
+
   return {
     fs: {
       read(filePath) {
@@ -301,7 +331,9 @@ export function createTenv(cwd: string): Tenv {
       ]);
       return service;
     },
-    async container({ name, image, env = {}, containerPort, healthcheck, pipeLogs }) {
+    async container({ name, image, env = {}, containerPort, healthcheck, pipeLogs, volumes = [] }) {
+      checkLocalDockerImage(image);
+
       const uniqueName = `${name}_${Math.random().toString(32).slice(2)}`;
 
       const hostPort = await getAvailablePort();
@@ -309,6 +341,12 @@ export function createTenv(cwd: string): Tenv {
       function msToNs(ms: number): number {
         return ms * 1000000;
       }
+
+      const volumeBindings = volumes.map(
+        v => `${v.hostPath}:${v.containerPath}${v.readOnly ? ':ro' : ''}`,
+      );
+
+      console.log(`Creating container with image: ${image}`);
 
       // start the image pull and wait for complete, always pull the image (will load from cache if exists)
       const imageStream = await docker.pull(image);
@@ -323,6 +361,7 @@ export function createTenv(cwd: string): Tenv {
           PortBindings: {
             [containerPort + '/tcp']: [{ HostPort: hostPort.toString() }],
           },
+          Binds: volumeBindings,
         },
         Healthcheck: {
           Test: healthcheck,
@@ -331,6 +370,8 @@ export function createTenv(cwd: string): Tenv {
           Retries: retries,
         },
       });
+
+      console.log(`Container ${uniqueName} created successfully.`);
 
       let stdboth = '';
       const stream = await ctr.attach({ stream: true, stdout: true, stderr: true });
@@ -342,6 +383,7 @@ export function createTenv(cwd: string): Tenv {
       });
 
       await ctr.start();
+      console.log(`Container ${uniqueName} started successfully.`);
 
       const ctrl = new AbortController();
       const container: Container = {
@@ -353,6 +395,20 @@ export function createTenv(cwd: string): Tenv {
         },
         getStats() {
           throw new Error('Cannot get stats of a container.');
+        },
+        async stop() {
+          if (ctrl.signal.aborted) {
+            // noop if already stopped
+            return;
+          }
+          await ctr.stop({ t: 0 });
+        },
+        async remove() {
+          if (ctrl.signal.aborted) {
+            // noop if already removed
+            return;
+          }
+          await ctr.remove({ force: true });
         },
         async [Symbol.asyncDispose]() {
           if (ctrl.signal.aborted) {
