@@ -56,6 +56,7 @@ jobs:
 
       - name: Run E2E tests
         run: |
+          yarn
           yarn test:e2e -- docker-image
 
       - name: build docker images
