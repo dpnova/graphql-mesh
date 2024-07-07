@@ -37,11 +37,12 @@ jobs:
       - name: Inspect Docker Buildx builder
         run: docker buildx inspect --bootstrap
 
-      - name: Log in to DockerHub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ardatan
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Docker image for local testing
         id: build-single
@@ -51,7 +52,7 @@ jobs:
           push: false
           load: true
           platforms: linux/amd64
-          tags: theguild/graphql-mesh:test
+          tags: ghcr.io/ardatan/graphql-mesh:test
 
       - name: Run E2E tests
         run: |
@@ -68,8 +69,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            theguild/graphql-mesh:v1
-            theguild/graphql-mesh:${{ github.sha }}
+            ghcr.io/ardatan/graphql-mesh:v1
+            ghcr.io/ardatan/graphql-mesh:${{ github.sha }}
 
-      - name: Log out of DockerHub
-        run: docker logout
+      - name: Log out of GitHub Container Registry
+        run: docker logout ghcr.io

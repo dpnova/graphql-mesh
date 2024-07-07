@@ -28,10 +28,12 @@ To summarize, GraphQL Mesh Serve allows you to:
 - Act as an HTTP proxy to enhance an existing GraphQL API
 - Adds an extra layer of security, performance, and monitoring to your API
 
-## Installation of CLI
+## Getting Started
 
-In order to get started, you need to have [Node.js](https://nodejs.org) installed in your
-environment. Then, you can install Serve CLI with your favorite package manager:
+### Option 1: Installation of CLI
+
+To use the CLI, you need to have [Node.js](https://nodejs.org) installed in your environment. Then,
+you can install Serve CLI with your favorite package manager:
 
 ```sh npm2yarn
 npm i @graphql-mesh/serve-cli
@@ -51,6 +53,19 @@ mesh-serve --supergraph=supergraph.graphql
 <Callout>
   See `Configure as a Proxy` section if you just want to proxy an existing GraphQL API.
 </Callout>
+
+### Option 2: Running with docker
+
+Ensure you have Docker installed on your machine. If not, you can download and install it from the
+official Docker website.
+
+```sh
+docker run -p 4000:4000 ghcr.io/ardatan/graphql-mesh:v1
+```
+
+For more advanced Docker configurations, including using Docker Compose and creating custom Docker
+images, refer to the detailed
+[Docker guide under the deployment section](/v1/serve/deployment/docker).
 
 ## CLI Arguments
 
